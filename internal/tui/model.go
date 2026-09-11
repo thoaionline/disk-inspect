@@ -77,6 +77,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.clamp()
+	case tea.MouseMsg:
+		if msg.Action != tea.MouseActionPress || m.filtering || m.help || m.scanning {
+			return m, nil
+		}
+		var key tea.KeyType
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			key = tea.KeyUp
+			if msg.Shift {
+				key = tea.KeyLeft
+			}
+		case tea.MouseButtonWheelDown:
+			key = tea.KeyDown
+			if msg.Shift {
+				key = tea.KeyRight
+			}
+		case tea.MouseButtonWheelLeft:
+			key = tea.KeyLeft
+		case tea.MouseButtonWheelRight:
+			key = tea.KeyRight
+		default:
+			return m, nil
+		}
+		return m.Update(tea.KeyMsg{Type: key})
 	case tick:
 		m.frame++
 		if m.scanning {
@@ -179,6 +203,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.current = m.rows[m.cursor]
 				m.resetView()
 			}
+		case "esc":
+			if m.query != "" {
+				m.query = ""
+				m.rebuild()
+				break
+			}
+			fallthrough
 		case "left", "backspace", "h":
 			if m.current.Parent != nil {
 				old := m.current
@@ -196,9 +227,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.resetView()
 		case "/":
 			m.filtering = true
-		case "esc":
-			m.query = ""
-			m.rebuild()
 		case "s":
 			m.sortBy = (m.sortBy + 1) % 3
 			m.cursor = 0
@@ -243,7 +271,7 @@ func (m *Model) rebuild() {
 	m.clamp()
 }
 
-func (m *Model) pageSize() int { return max(1, m.height-13) }
+func (m *Model) pageSize() int { return max(1, m.height-14) }
 func (m *Model) clamp() {
 	m.cursor = max(0, min(m.cursor, len(m.rows)-1))
 	if m.cursor < m.offset {
@@ -265,7 +293,7 @@ func (m *Model) View() string {
 	}
 	lines := []string{bright.Render(" DISK INSPECT") + muted.Render("  /  find where your space goes"), ""}
 	if m.help {
-		lines = append(lines, accent.Render(" Keyboard controls"), "", " ↑/↓  j/k       Move selection", " →/enter  l     Open directory", " ←/backspace h  Parent directory", " ~              Return to scan root", " pgup/pgdn g/G  Page / first / last", " /              Filter entries by name", " enter / esc    Apply / clear filter", " s              Sort: size → name → files", " a              Toggle allocated / apparent size", " r              Rescan root, preserve open folder", " ? / esc        Close help", " q / ctrl+c     Quit", "", muted.Render(" Symlinks are not followed. Hidden entries are included."))
+		lines = append(lines, accent.Render(" Keyboard & mouse controls"), "", " ↑/↓  j/k       Move selection", " →/enter  l     Open directory", " esc/←/h       Parent directory", " ~              Return to scan root", " pgup/pgdn g/G  Page / first / last", " /              Filter entries by name", " enter / esc    Apply / clear filter", " s              Sort: size → name → files", " a              Toggle allocated / apparent size", " r              Rescan root, preserve open folder", " wheel ↑/↓      Move selection", " wheel ←/→      Parent / open directory", " shift+wheel ↑/↓ Parent / open directory", " ? / esc        Close help", " q / ctrl+c     Quit", "", muted.Render(" Symlinks are not followed. Hidden entries are included."))
 		return fit(strings.Join(lines, "\n"), m.width, m.height)
 	}
 	if m.scanning {
@@ -357,13 +385,38 @@ func (m *Model) View() string {
 	} else if m.query != "" {
 		detail = " No matching entries; esc clears the filter"
 	}
-	lines = append(lines, detail)
+	lines = append(lines, detail, m.rootShare())
 	position := 0
 	if len(m.rows) > 0 {
 		position = m.cursor + 1
 	}
-	lines = append(lines, muted.Render(fmt.Sprintf(" %d/%d entries  ·  folder totals include its own metadata", position, len(m.rows))), " ↑↓ move  enter open  ← back  / filter  ? help  q quit")
+	controls := " ↑↓ move  enter open  ← back  / filter  ? help  q quit"
+	if m.width < 76 {
+		controls = " ↑↓ move  enter open  ← back  ? help  q quit"
+	}
+	lines = append(lines, muted.Render(fmt.Sprintf(" %d/%d entries  ·  folder totals include its own metadata", position, len(m.rows))), controls)
 	return fit(strings.Join(lines, "\n"), m.width, m.height)
+}
+
+// Keep the denominator anchored to the original scan root at every depth.
+func (m *Model) rootShare() string {
+	const label = " Selected / root  "
+	if m.root == nil || len(m.rows) == 0 {
+		return muted.Render(label + "— no selection")
+	}
+	share := float64(0)
+	if total := m.root.Size(m.apparent); total > 0 {
+		share = float64(m.rows[m.cursor].Size(m.apparent)) / float64(total)
+	}
+	share = min(1, max(0, share))
+	suffix := fmt.Sprintf(" %5.1f%%", share*100)
+	if m.root.Errors > 0 {
+		suffix += " (partial)"
+	}
+	width := max(1, min(40, m.width-1-ansi.StringWidth(label+suffix)))
+	filled := int(math.Round(share * float64(width)))
+	bar := accent.Render(strings.Repeat("━", filled)) + muted.Render(strings.Repeat("·", width-filled))
+	return label + bar + suffix
 }
 
 // Never allow filenames or filesystem errors to inject terminal control codes.

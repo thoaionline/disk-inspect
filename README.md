@@ -33,7 +33,7 @@ The interface uses [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 | --- | --- |
 | `↑` / `↓`, `k` / `j` | Move selection |
 | `Enter`, `→`, `l` | Open selected directory |
-| `Backspace`, `←`, `h` | Go to parent, up to the scan root |
+| `Esc`, `Backspace`, `←`, `h` | Go to parent, up to the scan root |
 | `~` | Return to scan root |
 | `PgUp` / `PgDn`, `Ctrl+U` / `Ctrl+D` | Move a page |
 | `g` / `G`, `Home` / `End` | First / last entry |
@@ -47,6 +47,12 @@ The interface uses [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 
 While editing a filter, letters (including `q`) enter text; `Ctrl+U` clears the
 input. Press `Enter` to resume navigation. Refresh scans the original root.
+`Esc` closes help or clears an active filter first; otherwise it goes up one level.
+Mouse wheel up/down moves selection. Horizontal wheel right opens the selected
+folder; wheel left returns to its parent. Shift+wheel down/up also opens/goes back
+when your terminal reports the modifier. Horizontal scrolling requires a terminal
+that sends horizontal mouse wheel events. Scrolling is inactive during scanning,
+help, and filter editing.
 The app only reads filesystem metadata and never deletes or changes your files.
 
 ## Size accounting
@@ -57,7 +63,11 @@ The app only reads filesystem metadata and never deletes or changes your files.
 - **Apparent** is the entry size reported by the filesystem. Start in this mode
   with `./disk-inspect --apparent [directory]`.
 - Directory totals include their own metadata and every descendant. Percentages
-  use the full current folder total, even when filtering. Hidden entries are included.
+  in the entry list use the full current folder total, even when filtering.
+  The persistent **Selected / root** bar shows the selected entry's share of the
+  original scan root at every navigation depth, using the active size mode.
+  It is marked `partial` if the root scan encountered read errors. Hidden entries
+  are included.
 - Symlinks are counted as links and never followed inside the tree. An explicitly
   selected root symlink is resolved. Hard links are counted per pathname; shared,
   compressed, and reflinked storage is not deduplicated. Totals may therefore differ

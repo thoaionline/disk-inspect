@@ -79,7 +79,7 @@ func run(args []string, out, errOut io.Writer) error {
 	}
 	m := tui.New(ctx, path, *apparent)
 	defer m.Close()
-	final, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx)).Run()
+	final, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithContext(ctx)).Run()
 	if ctx.Err() != nil {
 		return nil
 	}
